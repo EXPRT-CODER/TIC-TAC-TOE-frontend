@@ -1,44 +1,82 @@
 import { useEffect, useState } from "react";
+import { useLocation, useParams } from "react-router-dom";
+import { socket } from "../socket/socket";
 
 export default function Play() {
+  const { roomId } = useParams();
+  const { state } = useLocation();
+
+  const myId = state?.myId;
+  const players = state?.players;
+
+  const mySymbol = players?.X === myId ? "X" : "O";
+
   const [cells, setCells] = useState(Array(9).fill(""));
-  const [turn, setTurn] = useState(0);
+  const [turn, setTurn] = useState("X");
 
   useEffect(() => {
     const setVH = () => {
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty("--vh", `${vh}px`);
     };
+
     setVH();
     window.addEventListener("resize", setVH);
+
     return () => window.removeEventListener("resize", setVH);
+  }, []);
+  useEffect(() => {
+    const handleMoveMade = ({ index, symbol }) => {
+      setCells((prev) => {
+        const copy = [...prev];
+        copy[index] = symbol;
+        return copy;
+      });
+
+      setTurn(symbol === "X" ? "O" : "X");
+    };
+
+    socket.on("moveMade", handleMoveMade);
+
+    return () => {
+      socket.off("moveMade", handleMoveMade);
+    };
   }, []);
 
   const handleClick = (index) => {
-    if (cells[index] !== "" || turn >= 9) return;
+    if (cells[index] !== "") return;
+    if (turn !== mySymbol) return;
 
     const newCells = [...cells];
-    const char = turn % 2 === 0 ? "X" : "O";
-    newCells[index] = char;
+    newCells[index] = mySymbol;
 
     setCells(newCells);
-    setTurn(turn + 1);
+
+    const nextTurn = mySymbol === "X" ? "O" : "X";
+    setTurn(nextTurn);
+
+    socket.emit("makeMove", {
+      roomId,
+      index,
+      symbol: mySymbol,
+    });
   };
+
 
   return (
     <div className="home-theme relative w-full h-[calc(var(--vh)*100+0.5px)] px-4 py-6 overflow-hidden flex items-center">
-      <div className="home-theme-glow home-theme-glow-top" />
-      <div className="home-theme-glow home-theme-glow-bottom" />
       <div className="home-theme-panel mx-auto w-full max-w-3xl p-6 sm:p-8 relative z-10">
-        <p className="text-center text-xs sm:text-sm tracking-[0.25em] uppercase text-[var(--home-muted)]">
-          Competitive Room
-        </p>
-        <h2 className="mt-3 text-center text-3xl sm:text-4xl font-semibold text-[var(--home-text)]">
+        <h2 className="text-center text-3xl font-semibold text-[var(--home-text)]">
           Match Arena
         </h2>
-        <div className="mt-4 flex justify-center">
+
+        <div className="mt-4 flex flex-col items-center gap-2">
           <p className="play-turn-badge px-4 py-2 text-sm sm:text-base">
-            Current Turn: {turn % 2 === 0 ? "X" : "O"}
+            You are: {mySymbol}
+          </p>
+
+          <p className="play-turn-badge px-4 py-2 text-sm sm:text-base">
+            {turn === mySymbol ? "Your Turn" : "Opponent's Turn"}
           </p>
         </div>
 
@@ -47,7 +85,8 @@ export default function Play() {
             <button
               key={i}
               onClick={() => handleClick(i)}
-              className={`play-cell aspect-square text-4xl sm:text-6xl font-semibold transition hover:-translate-y-0.5 ${
+              disabled={value !== "" || turn !== mySymbol}
+              className={`play-cell aspect-square text-4xl sm:text-6xl font-semibold transition ${
                 value === "X"
                   ? "play-cell-x"
                   : value === "O"
@@ -59,16 +98,6 @@ export default function Play() {
             </button>
           ))}
         </div>
-
-        <button
-          onClick={() => {
-            setCells(Array(9).fill(""));
-            setTurn(0);
-          }}
-          className="mt-8 w-full rounded-xl border border-[var(--home-border)] bg-white/70 p-3 font-semibold text-[var(--home-accent)] hover:bg-white/90 transition-colors duration-200"
-        >
-          Reset Board
-        </button>
       </div>
     </div>
   );
