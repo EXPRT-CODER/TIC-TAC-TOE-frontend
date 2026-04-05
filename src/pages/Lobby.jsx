@@ -139,7 +139,7 @@ const Lobby = () => {
 
 
         {duelInvite && (
-  <div className="absolute top-3 left-1/2 z-50 w-[92%] max-w-[320px] -translate-x-1/2 sm:top-5 sm:max-w-[380px]">
+  <div className="absolute top-3 left-1/2 z-50 w-[92%] max-w-[320px] -translate-x-1/2 sm:top-5 sm:max-w-95">
     <div className="rounded-2xl border border-white/15 bg-slate-800/92 px-4 py-3 shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-300">

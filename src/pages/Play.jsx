@@ -1,5 +1,3 @@
-// Play.jsx
-
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
@@ -114,7 +112,7 @@ export default function Play() {
       )}
 
       <div className="home-theme-panel w-full max-w-3xl p-6 sm:p-8">
-        <h1 className="text-center text-3xl font-bold text-[var(--home-text)]">
+        <h1 className="text-center text-3xl font-bold text-[--home-text]">
           Match Arena
         </h1>
 
