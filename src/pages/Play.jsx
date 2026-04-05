@@ -1,100 +1,150 @@
+// Play.jsx
+
 import { useEffect, useState } from "react";
-import { useLocation, useParams } from "react-router-dom";
-import { socket } from "../socket/socket";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  leaveGame,
+  makeMove,
+  setupPlaySocket,
+} from "../socket/playSocket";
 
 export default function Play() {
   const { roomId } = useParams();
   const { state } = useLocation();
+  const navigate = useNavigate();
 
   const myId = state?.myId;
   const players = state?.players;
+  const username = state?.username;
+
+  useEffect(() => {
+    if (!myId || !players || !username) {
+      navigate("/");
+    }
+  }, [myId, players, username, navigate]);
 
   const mySymbol = players?.X === myId ? "X" : "O";
 
   const [cells, setCells] = useState(Array(9).fill(""));
   const [turn, setTurn] = useState("X");
+  const [gameEnded, setGameEnded] = useState(false);
+
+  const [resultMessage, setResultMessage] = useState("");
+  const [resultColor, setResultColor] = useState("bg-green-600");
 
   useEffect(() => {
-    const setVH = () => {
-      const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty("--vh", `${vh}px`);
-    };
+    let alreadyHandled = false;
 
-    setVH();
-    window.addEventListener("resize", setVH);
+    const cleanup = setupPlaySocket({
+      setCells,
+      setTurn,
 
-    return () => window.removeEventListener("resize", setVH);
-  }, []);
-  useEffect(() => {
-    const handleMoveMade = ({ index, symbol }) => {
-      setCells((prev) => {
-        const copy = [...prev];
-        copy[index] = symbol;
-        return copy;
-      });
+      onOpponentLeft: () => {
+        alreadyHandled = true;
+        setGameEnded(true);
 
-      setTurn(symbol === "X" ? "O" : "X");
-    };
+        setResultColor("bg-orange-500");
+        setResultMessage("Opponent left the game. You win!");
 
-    socket.on("moveMade", handleMoveMade);
+        setTimeout(() => {
+          navigate("/lobby", {
+            state: { username },
+          });
+        }, 5000);
+      },
+
+      onGameOver: (winner) => {
+        alreadyHandled = true;
+        setGameEnded(true);
+
+        if (winner === null) {
+          setResultColor("bg-yellow-500");
+          setResultMessage("Match Draw!");
+        } else if (winner === mySymbol) {
+          setResultColor("bg-green-600");
+          setResultMessage(`${username} Wins!`);
+        } else {
+          setResultColor("bg-red-600");
+          setResultMessage("Opponent Wins!");
+        }
+
+        setTimeout(() => {
+          navigate("/lobby", {
+            state: { username },
+          });
+        }, 5000);
+      },
+    });
 
     return () => {
-      socket.off("moveMade", handleMoveMade);
+      cleanup();
+
+      if (!alreadyHandled) {
+        leaveGame();
+      }
     };
-  }, []);
+  }, [mySymbol, navigate, username]);
 
   const handleClick = (index) => {
-    if (cells[index] !== "") return;
+    if (gameEnded) return;
     if (turn !== mySymbol) return;
+    if (cells[index] !== "") return;
 
-    const newCells = [...cells];
-    newCells[index] = mySymbol;
+    const updated = [...cells];
+    updated[index] = mySymbol;
 
-    setCells(newCells);
+    setCells(updated);
+    setTurn(mySymbol === "X" ? "O" : "X");
 
-    const nextTurn = mySymbol === "X" ? "O" : "X";
-    setTurn(nextTurn);
-
-    socket.emit("makeMove", {
-      roomId,
-      index,
-      symbol: mySymbol,
-    });
+    makeMove(roomId, index, mySymbol, updated);
   };
 
-
   return (
-    <div className="home-theme relative w-full h-[calc(var(--vh)*100+0.5px)] px-4 py-6 overflow-hidden flex items-center">
-      <div className="home-theme-panel mx-auto w-full max-w-3xl p-6 sm:p-8 relative z-10">
-        <h2 className="text-center text-3xl font-semibold text-[var(--home-text)]">
+    <div className="home-theme relative w-full min-h-screen px-4 py-6 flex items-center justify-center">
+      {resultMessage && (
+        <div
+          className={`absolute top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-4 rounded-xl text-white text-lg sm:text-xl font-bold shadow-xl transition-all duration-300 ${resultColor}`}
+        >
+          <div className="text-center">{resultMessage}</div>
+
+          <div className="mt-1 text-center text-sm text-white/90 font-medium">
+            Returning to lobby in 5 seconds...
+          </div>
+        </div>
+      )}
+
+      <div className="home-theme-panel w-full max-w-3xl p-6 sm:p-8">
+        <h1 className="text-center text-3xl font-bold text-[var(--home-text)]">
           Match Arena
-        </h2>
+        </h1>
 
-        <div className="mt-4 flex flex-col items-center gap-2">
-          <p className="play-turn-badge px-4 py-2 text-sm sm:text-base">
+        <div className="mt-5 flex flex-col items-center gap-3">
+          <div className="play-turn-badge px-4 py-2">
             You are: {mySymbol}
-          </p>
+          </div>
 
-          <p className="play-turn-badge px-4 py-2 text-sm sm:text-base">
-            {turn === mySymbol ? "Your Turn" : "Opponent's Turn"}
-          </p>
+          {!gameEnded && (
+            <div className="play-turn-badge px-4 py-2">
+              {turn === mySymbol ? "Your Turn" : "Opponent's Turn"}
+            </div>
+          )}
         </div>
 
         <div className="mt-8 grid grid-cols-3 gap-3 sm:gap-4">
-          {cells.map((value, i) => (
+          {cells.map((cell, index) => (
             <button
-              key={i}
-              onClick={() => handleClick(i)}
-              disabled={value !== "" || turn !== mySymbol}
-              className={`play-cell aspect-square text-4xl sm:text-6xl font-semibold transition ${
-                value === "X"
+              key={index}
+              onClick={() => handleClick(index)}
+              disabled={cell !== "" || turn !== mySymbol || gameEnded}
+              className={`play-cell aspect-square text-4xl sm:text-6xl font-bold transition ${
+                cell === "X"
                   ? "play-cell-x"
-                  : value === "O"
-                    ? "play-cell-o"
-                    : "play-cell-empty"
+                  : cell === "O"
+                  ? "play-cell-o"
+                  : "play-cell-empty"
               }`}
             >
-              {value}
+              {cell}
             </button>
           ))}
         </div>

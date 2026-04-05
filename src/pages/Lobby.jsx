@@ -43,7 +43,7 @@ const Lobby = () => {
     connectLobby(username);
 
     return () => {
-      cleanupLobby();
+      cleanupLobby({ disconnect: false });
       // Ensure state resets on unmount so stale data doesn't flash if we re-enter
       setUserNames([]);
       setOnUsers(0);
@@ -62,7 +62,7 @@ const Lobby = () => {
       setRequestingPlayerId(null);
       setDuelInvite(null);
       navigate(`/play/${roomId}`, {
-        state: { roomId, players, myId },
+        state: { roomId, players, myId, username },
       });
     };
 
@@ -75,7 +75,7 @@ const Lobby = () => {
       socket.off("duelStarted", handleDuelStarted);
       cleanupDuelListeners();
     };
-  }, [myId, navigate]);
+  }, [myId, navigate, username]);
 
   // 3. View Height Fix for Mobile
   useEffect(() => {
@@ -107,6 +107,18 @@ const Lobby = () => {
     (validPage + 1) * PLAYERS_PER_PAGE
   );
 
+  useEffect(() => {
+    if (!requestingPlayerId) return;
+
+    const requestedPlayer = userNames.find(
+      (player) => player.id === requestingPlayerId
+    );
+
+    if (!requestedPlayer || requestedPlayer.playing) {
+      setRequestingPlayerId(null);
+    }
+  }, [requestingPlayerId, userNames]);
+
   // Handlers
   const handleAcceptDuel = () => {
     socket.emit("acceptDuel", { fromId: duelInvite.fromId });
@@ -114,43 +126,60 @@ const Lobby = () => {
   };
 
   const handleRequestDuel = (playerId) => {
+    if (userNames.find((player) => player.id === playerId)?.playing) {
+      return;
+    }
+
     setRequestingPlayerId(playerId);
     sendDuelRequest(playerId);
   };
 
   return (
     <div className="home-theme relative w-full h-[calc(var(--vh)*100+0.5px)] px-4 py-6 flex justify-center items-center overflow-hidden">
+
+
+        {duelInvite && (
+  <div className="absolute top-3 left-1/2 z-50 w-[92%] max-w-[320px] -translate-x-1/2 sm:top-5 sm:max-w-[380px]">
+    <div className="rounded-2xl border border-white/15 bg-slate-800/92 px-4 py-3 shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-300">
+          ⚔️
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-white sm:text-base">
+            {duelInvite.fromName} challenged you
+          </p>
+
+          <p className="mt-0.5 text-xs text-slate-300 sm:text-sm">
+            Accept this duel request?
+          </p>
+
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={handleAcceptDuel}
+              className="flex-1 rounded-xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-600 active:scale-[0.98]"
+            >
+              Accept
+            </button>
+
+            <button
+              onClick={() => setDuelInvite(null)}
+              className="flex-1 rounded-xl bg-rose-500 px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-rose-500/25 transition hover:bg-rose-600 active:scale-[0.98]"
+            >
+              Reject
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
       <div className="home-theme-panel w-full max-w-3xl p-6 sm:p-8 md:p-10">
         <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-center text-(--home-text)">
           Online Players: {onUsers}
         </h1>
-
-        {duelInvite && (
-          <div className="mt-5 mb-4 rounded-xl border border-yellow-400 bg-yellow-100 p-4 text-black shadow">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <p className="font-semibold">
-                {duelInvite.fromName} challenged you!
-              </p>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={handleAcceptDuel}
-                  className="rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700"
-                >
-                  Accept
-                </button>
-
-                <button
-                  onClick={() => setDuelInvite(null)}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-                >
-                  Reject
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {loading && (
           <p className="text-center mt-5 text-sm sm:text-base">
             Server is waking up... wait a minute
@@ -160,6 +189,13 @@ const Lobby = () => {
         <div className="mt-6 flex flex-col gap-3">
           {paginatedPlayers.map((player) => {
             const isMe = player.id === myId;
+            const isPlaying = player.playing;
+            const isRequesting = requestingPlayerId === player.id;
+            const buttonLabel = isPlaying
+              ? "Playing"
+              : isRequesting
+              ? "Requesting"
+              : "Req DUEL";
 
             return (
               <div
@@ -181,14 +217,14 @@ const Lobby = () => {
                 ) : (
                   <button
                     onClick={() => handleRequestDuel(player.id)}
-                    disabled={requestingPlayerId === player.id}
+                    disabled={isRequesting || isPlaying}
                     className="absolute right-3 top-1/2 -translate-y-1/2
                     bg-(--home-accent) hover:bg-(--home-accent-strong)
                     text-white text-xs sm:text-sm px-3 py-1.5 rounded-lg
                     transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70
                     shadow-[0_0_10px_var(--home-accent)]"
                   >
-                    {requestingPlayerId === player.id ? "Requesting" : "Req DUEL"}
+                    {buttonLabel}
                   </button>
                 )}
               </div>

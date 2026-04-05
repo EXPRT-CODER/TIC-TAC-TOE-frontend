@@ -77,7 +77,7 @@ export const cleanupDuelListeners = () => {
   socket.off("duelRequest");
   socket.off("duelStarted");
 };
-export const cleanupLobby = () => {
+export const cleanupLobby = ({ disconnect = true } = {}) => {
   socket.off("connect");
   socket.off("disconnect");
   socket.off("usersUpdate");
@@ -85,5 +85,7 @@ export const cleanupLobby = () => {
 
   cleanupDuelListeners();
 
-  socket.disconnect();
+  if (disconnect) {
+    socket.disconnect();
+  }
 };
